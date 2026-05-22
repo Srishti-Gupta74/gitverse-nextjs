@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/middleware";
+import { requireAuth } from "@/lib/api-auth";
 import { GitHubService, GitHubRateLimitError } from "@/lib/services/githubService";
+import { sanitizeErrorMessage } from "@/lib/utils/rateLimit";
 import { repositoryService } from "@/lib/services/repositoryService";
 
 export async function POST(request: NextRequest) {
@@ -34,6 +35,10 @@ export async function POST(request: NextRequest) {
     const github = new GitHubService(token);
     const repoData = await github.getRepository(parsed.owner, parsed.repo);
 
+    if (!repoData) {
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    }
+
     const repository = await repositoryService.createRepository({
       name: repoData.name,
       url: repoData.clone_url,
@@ -43,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ repository, source: "github" }, { status: 201 });
   } catch (error: any) {
-    console.error("GitHub import error:", error);
+    console.error("GitHub import error:", sanitizeErrorMessage(error));
 
     if (error instanceof GitHubRateLimitError) {
       return NextResponse.json(
@@ -52,9 +57,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: "Failed to import from GitHub" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
