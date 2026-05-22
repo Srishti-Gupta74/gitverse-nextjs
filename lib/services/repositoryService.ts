@@ -23,6 +23,56 @@ export type RepositoryAnalysisProgressReporter = (
   update: RepositoryAnalysisProgress,
 ) => void | Promise<void>;
 
+class AnalysisProgressTracker {
+  constructor(
+    private repositoryId: number,
+    private reporter?: RepositoryAnalysisProgressReporter
+  ) {}
+
+  async update(percent: number, message: string, details?: unknown) {
+    const safePercent = Math.max(0, Math.min(100, Math.round(percent || 0)));
+    console.log(`[Repo ${this.repositoryId}] ${safePercent}% - ${message}`);
+    
+    if (!this.reporter) return;
+    try {
+      await this.reporter({
+        progressPercent: safePercent,
+        progressMessage: message,
+        progressDetails: details,
+      });
+    } catch {
+      // Progress reporting must never break analysis
+    }
+  }
+
+  async progressSubTask(
+    startPercent: number,
+    endPercent: number,
+    current: number,
+    total: number,
+    message: string
+  ) {
+    if (total <= 0) {
+      await this.update(endPercent, `${message} (Completed)`);
+      return;
+    }
+    const range = endPercent - startPercent;
+    const ratio = Math.max(0, Math.min(1, current / total));
+    const currentPercent = startPercent + (range * ratio);
+    await this.update(currentPercent, message);
+  }
+
+  async fail(error: Error | unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[Repo ${this.repositoryId}] Analysis Failed: ${msg}`);
+    if (this.reporter) {
+      try {
+        await this.reporter({ progressMessage: `Failed: ${msg}` });
+      } catch {}
+    }
+  }
+}
+
 export class RepositoryService {
   private async tryReadmeFromRepoPath(repoPath: string): Promise<{
     path: string;
@@ -170,16 +220,8 @@ export class RepositoryService {
       data: { status: "analyzing" },
     });
 
-    const report = async (update: RepositoryAnalysisProgress) => {
-      if (!opts?.onProgress) return;
-      try {
-        await opts.onProgress(update);
-      } catch {
-        // Progress reporting must never break analysis.
-      }
-    };
-
-    await report({ progressPercent: 1, progressMessage: "Starting" });
+    const tracker = new AnalysisProgressTracker(repositoryId, opts?.onProgress);
+    await tracker.update(1, "Starting analysis");
 
     // Try to use GitHub API to avoid cloning.
     const parsed = GitHubService.parseGitHubUrl(repository.url);
@@ -459,6 +501,24 @@ export class RepositoryService {
   }
 
   /**
+   * Safely marks a repository as failed, preventing uncaught exceptions
+   * if the database update fails.
+   */
+  async markRepositoryFailed(id: number, reason?: string) {
+    try {
+      await prisma.repository.update({
+        where: { id },
+        data: { status: "failed" },
+      });
+      if (reason) {
+        console.log(`Repository ${id} marked as failed. Reason: ${reason}`);
+      }
+    } catch (error) {
+      console.error(`Safeguard: Failed to update repository ${id} status to 'failed'`, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
    * Get repository with all related data
    */
   async getRepository(id: number, userId: number) {
@@ -532,9 +592,16 @@ export class RepositoryService {
       throw new Error("Repository not found");
     }
 
-    await prisma.repository.delete({
-      where: { id },
-    });
+    // Delete related analysis jobs and the repository in a transaction
+    // to ensure no orphaned rows remain if the process is interrupted.
+    await prisma.$transaction([
+      prisma.analysisJob.deleteMany({
+        where: { repositoryId: id },
+      }),
+      prisma.repository.delete({
+        where: { id },
+      }),
+    ]);
 
     return { success: true };
   }
@@ -588,3 +655,36 @@ export class RepositoryService {
 }
 
 export const repositoryService = new RepositoryService();
+interface GetRepositoriesOptions {
+  userId: number;
+  limit: number;
+  cursor?: string;
+}
+
+export async function getRepositories({ userId, limit, cursor }: GetRepositoriesOptions) {
+  const cursorId = cursor ? parseInt(cursor.trim(), 10) : undefined;
+if (cursor && (!/^[1-9]\d*$/.test(cursor.trim()) || isNaN(cursorId!))) {
+  throw new Error("Invalid cursor value");
+}
+
+  return prisma.repository.findMany({
+    where: { userId },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit,
+    ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+    include: {
+      _count: {
+        select: {
+          commits: true,
+          contributors: true,
+          files: true,
+          branches: true,
+        },
+      },
+      languages: {
+        orderBy: { percentage: "desc" },
+        take: 3,
+      },
+    },
+  });
+}
