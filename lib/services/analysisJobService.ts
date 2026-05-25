@@ -8,6 +8,17 @@ export type JobProgressUpdate = {
 };
 
 const DEFAULT_LOCK_MS = 5 * 60 * 1000;
+function isRetryableError(error: any): boolean {
+  const message = error?.message?.toLowerCase() || "";
+
+  return (
+    message.includes("timeout") ||
+    message.includes("network") ||
+    message.includes("rate limit") ||
+    message.includes("fetch failed") ||
+    message.includes("temporarily unavailable")
+  );
+}
 
 function computeBackoffMs(attempt: number): number {
   // Exponential backoff with cap (10s, 20s, 40s, ... up to 5m)
@@ -95,8 +106,9 @@ export class AnalysisJobService {
     attempts: number;
     maxAttempts: number;
   }): Promise<void> {
-    const shouldRetry = params.attempts < params.maxAttempts;
-
+   const shouldRetry =
+  params.attempts < params.maxAttempts &&
+  isRetryableError(params.error);
     if (shouldRetry) {
       const delay = computeBackoffMs(params.attempts);
       await prisma.analysisJob.update({
