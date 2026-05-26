@@ -605,7 +605,7 @@ export default function LandingPage() {
               <div className="feature-carousel__track">
                 {features.map((feature, index) => (
                   <div
-                    key={feature.title}
+                    key={`${feature.title}-${index}`}
                     ref={(el) => (slideRefs.current[index] = el)}
                     className={`feature-carousel__slide ${
                       index === activeFeatureIndex ? "active" : ""
@@ -636,7 +636,7 @@ export default function LandingPage() {
               <div className="flex items-center justify-center gap-2">
                 {features.map((feature, index) => (
                   <button
-                    key={feature.title}
+                    key={`${feature.title}-${index}`}
                     type="button"
                     onClick={() => setActiveFeatureIndex(index)}
                     aria-label={`Show ${feature.title}`}
