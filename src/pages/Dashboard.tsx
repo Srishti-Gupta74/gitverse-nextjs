@@ -101,7 +101,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (analyzeUrl) {
       setRepoUrl(analyzeUrl);
-      
+
       const triggerAutoAnalyze = async () => {
         setAnalyzing(true);
         try {
@@ -144,7 +144,7 @@ export default function Dashboard() {
           setAnalyzing(false);
         }
       };
-      
+
       void triggerAutoAnalyze();
     }
   }, [analyzeUrl, router, addRepo]);
@@ -159,140 +159,147 @@ export default function Dashboard() {
       const repos = response.data.repositories || [];
       setRepositories(Array.isArray(repos) ? repos : []);
     } catch (error) {
-      console.error("Error fetching repositories:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch repositories.",
-        variant: "destructive",
-      });
-      setRepositories([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  console.error("Dashboard repository fetch failed:", error);
 
-  const totalCommits = Array.isArray(repositories)
-    ? repositories.reduce((sum, r: any) => sum + (r._count?.commits || 0), 0)
-    : 0;
-  const totalContributors = Array.isArray(repositories)
-    ? repositories.reduce(
-      (sum, r: any) => sum + (r._count?.contributors || 0),
-      0
-    )
-    : 0;
-  const totalFiles = Array.isArray(repositories)
-    ? repositories.reduce((sum, r: any) => sum + (r._count?.files || 0), 0)
-    : 0;
+  const errorMessage =
+    error instanceof Error
+      ? error.message
+      : "Failed to fetch repositories.";
 
-  const stats = [
-    {
-      label: "Repositories Analyzed",
-      value: (Array.isArray(repositories) ? repositories.length : 0).toString(),
-      icon: GitBranch,
-      change: `${repositories.filter((r: any) => r.status === "completed").length} completed`,
-    },
-    {
-      label: "Total Commits",
-      value: totalCommits.toLocaleString(),
-      icon: Activity,
-      change: `Across ${repositories.length} repos`,
-    },
-    {
-      label: "Contributors",
-      value: totalContributors.toLocaleString(),
-      icon: Users,
-      change: `Active developers`,
-    },
-    {
-      label: "Total Files",
-      value: totalFiles.toLocaleString(),
-      icon: Code,
-      change: `Tracked files`,
-    },
-  ];
+  toast({
+    title: "Repository Fetch Failed",
+    description: errorMessage,
+    variant: "destructive",
+  });
 
-  const handleAnalyze = async () => {
-    if (!repoUrl.trim()) return;
+  setRepositories([]);
+} finally {
+  setLoading(false);
+}
+};
 
-    if (!isValidGithubUrl(repoUrl)) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid GitHub repository URL (e.g., https://github.com/owner/repo).",
-        variant: "destructive",
-      });
-      return;
-    }
+const totalCommits = Array.isArray(repositories)
+  ? repositories.reduce((sum, r: any) => sum + (r._count?.commits || 0), 0)
+  : 0;
+const totalContributors = Array.isArray(repositories)
+  ? repositories.reduce(
+    (sum, r: any) => sum + (r._count?.contributors || 0),
+    0
+  )
+  : 0;
+const totalFiles = Array.isArray(repositories)
+  ? repositories.reduce((sum, r: any) => sum + (r._count?.files || 0), 0)
+  : 0;
 
-    setAnalyzing(true);
-    try {
-      const token = localStorage.getItem("gitverse_token");
+const stats = [
+  {
+    label: "Repositories Analyzed",
+    value: (Array.isArray(repositories) ? repositories.length : 0).toString(),
+    icon: GitBranch,
+    change: `${repositories.filter((r: any) => r.status === "completed").length} completed`,
+  },
+  {
+    label: "Total Commits",
+    value: totalCommits.toLocaleString(),
+    icon: Activity,
+    change: `Across ${repositories.length} repos`,
+  },
+  {
+    label: "Contributors",
+    value: totalContributors.toLocaleString(),
+    icon: Users,
+    change: `Active developers`,
+  },
+  {
+    label: "Total Files",
+    value: totalFiles.toLocaleString(),
+    icon: Code,
+    change: `Tracked files`,
+  },
+];
 
-      // Extract owner and name for recent storage
-      const cleanUrl = repoUrl.trim().replace(/\/$/, "").replace(/\.git$/, "");
-      const cleanParts = cleanUrl.split("/");
-      const ownerName = cleanParts[cleanParts.length - 2] || "unknown";
+const handleAnalyze = async () => {
+  if (!repoUrl.trim()) return;
 
-      const response = await axios.post(
-        buildApiUrl("/api/repositories"),
-        {
-          name: repoName,
-          url: repoUrl.trim(),
-          description: `Repository from ${repoUrl}`,
-          scope: repoScope.trim() || undefined,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  if (!isValidGithubUrl(repoUrl)) {
+    toast({
+      title: "Invalid URL",
+      description: "Please enter a valid GitHub repository URL (e.g., https://github.com/owner/repo).",
+      variant: "destructive",
+    });
+    return;
+  }
 
-      // Add to recent repositories locally
-      addRepo({
-        owner: ownerName,
+  setAnalyzing(true);
+  try {
+    const token = localStorage.getItem("gitverse_token");
+
+    // Extract owner and name for recent storage
+    const cleanUrl = repoUrl.trim().replace(/\/$/, "").replace(/\.git$/, "");
+    const cleanParts = cleanUrl.split("/");
+    const ownerName = cleanParts[cleanParts.length - 2] || "unknown";
+
+    const response = await axios.post(
+      buildApiUrl("/api/repositories"),
+      {
         name: repoName,
         url: repoUrl.trim(),
-      });
-
-      // Check if this is an existing repository
-      const isExisting = repositories.some(
-        (r: any) => r.url === repoUrl.trim()
-      );
-
-      await fetchRepositories();
-
-      router.push(`/repo/${response.data.repository.id}`);
-
-      if (isExisting) {
-        console.log("Navigating to existing repository");
+        description: `Repository from ${repoUrl}`,
+        scope: repoScope.trim() || undefined,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` },
       }
+    );
 
-      setRepoUrl("");
-      setRepoScope("");
-    } catch (error: any) {
+    // Add to recent repositories locally
+    addRepo({
+      owner: ownerName,
+      name: repoName,
+      url: repoUrl.trim(),
+    });
 
-      console.error("Error creating repository:", error);
-      
-      let errMsg = "Failed to analyze repository";
-      if (error.response?.status === 404 || error.response?.data?.error === "NOT_FOUND") {
-        errMsg = "Repository not found. Please ensure the URL is correct and the repository is public.";
-      } else {
-        errMsg = error.response?.data?.message || error.response?.data?.error || error.message || errMsg;
-      }
+    // Check if this is an existing repository
+    const isExisting = repositories.some(
+      (r: any) => r.url === repoUrl.trim()
+    );
 
-      toast({
-        title: "Analysis Failed",
-        description: errMsg,
-        variant: "destructive",
-      });
-    } finally {
-      setAnalyzing(false);
+    await fetchRepositories();
+
+    router.push(`/repo/${response.data.repository.id}`);
+
+    if (isExisting) {
+      console.log("Navigating to existing repository");
     }
-  };
+
+    setRepoUrl("");
+    setRepoScope("");
+  } catch (error: any) {
+
+    console.error("Error creating repository:", error);
+
+    let errMsg = "Failed to analyze repository";
+    if (error.response?.status === 404 || error.response?.data?.error === "NOT_FOUND") {
+      errMsg = "Repository not found. Please ensure the URL is correct and the repository is public.";
+    } else {
+      errMsg = error.response?.data?.message || error.response?.data?.error || error.message || errMsg;
+    }
+
+    toast({
+      title: "Analysis Failed",
+      description: errMsg,
+      variant: "destructive",
+    });
+  } finally {
+    setAnalyzing(false);
+  }
+};
 const formatTimeAgo = (date: string | Date | undefined) => {
   if (!date) return 'Never';
   const d = new Date(date);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - d.getTime()) / 1000);
-  
+
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -321,7 +328,7 @@ if (loading) {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        
+
         {/* Welcome skeleton */}
         <div className="space-y-2">
           <Skeleton className="h-7 w-64" />
@@ -369,167 +376,167 @@ if (loading) {
     </DashboardLayout>
   );
 }
-  return (
-    <DashboardLayout>
+return (
+  <DashboardLayout>
     <div className="min-h-screen bg-background"></div>
-      <div className="space-y-6">
-        {/* Welcome Section */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2">
-            Welcome back, {user?.name}! 👋
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Here&apos;s what&apos;s happening with your repositories today
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2">
+          Welcome back, {user?.name}! 👋
+        </h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Here&apos;s what&apos;s happening with your repositories today
+        </p>
+      </div>
 
-        {/* Quick Analysis Input */}
-        <Card className="glass glow-primary">
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Input
-                type="url"
-                ref={searchRef}
-                placeholder="https://github.com/username/repository"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                className="flex-1 bg-background/50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-                aria-label="Repository URL to analyze"
-              />
-              <Button
-                onClick={handleAnalyze}
-                disabled={analyzing || !repoUrl.trim()}
-                className="bg-gradient-primary hover:opacity-90 transition-opacity"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {analyzing ? "Analyzing..." : "Analyze Repository"}
-              </Button>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 mt-3">
-              <Input
-                type="text"
-                placeholder="Scope (e.g., packages/, src/) - Optional"
-                value={repoScope}
-                onChange={(e) => setRepoScope(e.target.value)}
-                className="flex-1 bg-background/50 max-w-sm"
-                onKeyPress={(e) => e.key === "Enter" && handleAnalyze()}
-              />
-            </div>
-            {/* Shortcut hint would go here */}
-          </CardContent>
-        </Card>
-
-        {/* Recent Repositories */}
-        <RecentReposList />
-
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {stats.map((stat, index) => (
-            <Card
-              key={stat.label}
-              className="glass glass-hover"
-              style={{ animationDelay: `${index * 0.1}s` }}
+      {/* Quick Analysis Input */}
+      <Card className="glass glow-primary">
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Input
+              type="url"
+              ref={searchRef}
+              placeholder="https://github.com/username/repository"
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              className="flex-1 bg-background/50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
+              aria-label="Repository URL to analyze"
+            />
+            <Button
+              onClick={handleAnalyze}
+              disabled={analyzing || !repoUrl.trim()}
+              className="bg-gradient-primary hover:opacity-90 transition-opacity"
             >
-              <CardContent className="pt-4 sm:pt-6">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-1 truncate">
-                      {stat.label}
-                    </p>
-                    {loading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-8 w-20" />
-                        <Skeleton className="h-4 w-28" />
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-2xl sm:text-3xl font-heading font-bold break-words">
-                        {stat.value}
-                        </p>
+              <Plus className="h-4 w-4 mr-2" />
+              {analyzing ? "Analyzing..." : "Analyze Repository"}
+            </Button>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 mt-3">
+            <Input
+              type="text"
+              placeholder="Scope (e.g., packages/, src/) - Optional"
+              value={repoScope}
+              onChange={(e) => setRepoScope(e.target.value)}
+              className="flex-1 bg-background/50 max-w-sm"
+              onKeyPress={(e) => e.key === "Enter" && handleAnalyze()}
+            />
+          </div>
+          {/* Shortcut hint would go here */}
+        </CardContent>
+      </Card>
 
-                        <p className="text-xs text-accent mt-1 flex items-center gap-1 flex-wrap">
+      {/* Recent Repositories */}
+      <RecentReposList />
+
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {stats.map((stat, index) => (
+          <Card
+            key={stat.label}
+            className="glass glass-hover"
+            style={{ animationDelay: `${index * 0.1}s` }}
+          >
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground mb-1 truncate">
+                    {stat.label}
+                  </p>
+                  {loading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-8 w-20" />
+                      <Skeleton className="h-4 w-28" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-2xl sm:text-3xl font-heading font-bold break-words">
+                        {stat.value}
+                      </p>
+
+                      <p className="text-xs text-accent mt-1 flex items-center gap-1 flex-wrap">
                         <TrendingUp className="h-3 w-3 flex-shrink-0" />
                         <span className="truncate">{stat.change}</span>
-                        </p>
-                      </>
-                    )}
-                  </div>
-                  <div className="p-2 sm:p-3 rounded-lg bg-primary/10 flex-shrink-0">
-                    <stat.icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                  </div>
+                      </p>
+                    </>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Recent Repositories */}
-          <Card className="lg:col-span-2 glass">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base sm:text-lg font-heading">
-                    Recent Repositories
-                  </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">
-                    Your recently analyzed projects
-                  </CardDescription>
+                <div className="p-2 sm:p-3 rounded-lg bg-primary/10 flex-shrink-0">
+                  <stat.icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push("/search")}
-                  className="self-start sm:self-auto"
-                >
-                  View All
-                  <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-2" />
-                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border border-border/50"
-                    >
-                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                        <Skeleton className="h-9 w-9 rounded-lg flex-shrink-0" />
-                        <div className="space-y-2 min-w-0">
-                          <Skeleton className="h-5 w-32 sm:w-48" />
-                          <Skeleton className="h-4 w-40 sm:w-64" />
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 sm:gap-4 mt-2 sm:mt-0">
-                        <Skeleton className="h-4 w-16" />
-                        <Skeleton className="h-4 w-12" />
-                        <Skeleton className="h-4 w-20" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Recent Repositories */}
+        <Card className="lg:col-span-2 glass">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="text-base sm:text-lg font-heading">
+                  Recent Repositories
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Your recently analyzed projects
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/search")}
+                className="self-start sm:self-auto"
+              >
+                View All
+                <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-2" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border border-border/50"
+                  >
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                      <Skeleton className="h-9 w-9 rounded-lg flex-shrink-0" />
+                      <div className="space-y-2 min-w-0">
+                        <Skeleton className="h-5 w-32 sm:w-48" />
+                        <Skeleton className="h-4 w-40 sm:w-64" />
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : repositories.length === 0 ? (
-                <EmptyState
-                 icon={GitBranch}
-                 title="No repositories yet"
-                 description="Start by importing a GitHub repository to explore commits, contributors, code structure, and repository insights."
-                 actionLabel="Analyze Repository"
-                 onAction={() => router.push("/analyze")}
-                />
-              ) : (
-                <div className="space-y-3">
-                  {[...repositories]
-                    .sort((a: any, b: any) => {
-                      const aTime = new Date(a.lastAnalyzedAt || a.createdAt).getTime();
-                      const bTime = new Date(b.lastAnalyzedAt || b.createdAt).getTime();
-                      return bTime - aTime;
-                    })
-                    .slice(0, 5)
-                    .map((repo: any) => (
+                    <div className="flex flex-wrap gap-2 sm:gap-4 mt-2 sm:mt-0">
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-12" />
+                      <Skeleton className="h-4 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : repositories.length === 0 ? (
+              <EmptyState
+                icon={GitBranch}
+                title="No repositories yet"
+                description="Start by importing a GitHub repository to explore commits, contributors, code structure, and repository insights."
+                actionLabel="Analyze Repository"
+                onAction={() => router.push("/analyze")}
+              />
+            ) : (
+              <div className="space-y-3">
+                {[...repositories]
+                  .sort((a: any, b: any) => {
+                    const aTime = new Date(a.lastAnalyzedAt || a.createdAt).getTime();
+                    const bTime = new Date(b.lastAnalyzedAt || b.createdAt).getTime();
+                    return bTime - aTime;
+                  })
+                  .slice(0, 5)
+                  .map((repo: any) => (
                     <div
                       key={repo.id}
                       className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer glass-hover"
@@ -572,37 +579,37 @@ if (loading) {
                       </div>
                     </div>
                   ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Recent Activity */}
-          <Card className="glass">
-            <CardHeader>
-              <CardTitle className="text-base sm:text-lg font-heading">
-                Recent Activity
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
-                Your latest actions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-start gap-2 sm:gap-3">
-                      <Skeleton className="mt-1 h-6 w-6 rounded-full flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-4 w-full max-w-[200px]" />
-                        <Skeleton className="h-3 w-16" />
-                      </div>
+        {/* Recent Activity */}
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="text-base sm:text-lg font-heading">
+              Recent Activity
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              Your latest actions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-start gap-2 sm:gap-3">
+                    <Skeleton className="mt-1 h-6 w-6 rounded-full flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-full max-w-[200px]" />
+                      <Skeleton className="h-3 w-16" />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentActivity.map((activity: any, index: number) => (
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentActivity.map((activity: any, index: number) => (
                   <div key={index} className="flex items-start gap-2 sm:gap-3">
                     <div className="mt-1 p-1.5 rounded-full bg-accent/10 flex-shrink-0">
                       <Activity className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-accent" />
@@ -621,60 +628,60 @@ if (loading) {
                   </div>
                 ))}
               </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <Card className="glass">
-          <CardHeader>
-            <CardTitle className="text-base sm:text-lg font-heading">
-              Quick Actions
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Get started with these common tasks
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <Button
-                variant="outline"
-                className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
-                onClick={() => router.push("/dashboard")}
-              >
-                <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="font-medium">Analyze New Repo</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  Add a new repository
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
-                onClick={() => router.push("/search")}
-              >
-                <GitBranch className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="font-medium">Browse Repos</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  View all repositories
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
-                onClick={() => router.push("/settings")}
-              >
-                <Users className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="font-medium">Manage Profile</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  Update settings
-                </span>
-              </Button>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
-  );
+
+      {/* Quick Actions */}
+      <Card className="glass">
+        <CardHeader>
+          <CardTitle className="text-base sm:text-lg font-heading">
+            Quick Actions
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Get started with these common tasks
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
+              onClick={() => router.push("/dashboard")}
+            >
+              <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="font-medium">Analyze New Repo</span>
+              <span className="text-xs text-muted-foreground text-center">
+                Add a new repository
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
+              onClick={() => router.push("/search")}
+            >
+              <GitBranch className="h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="font-medium">Browse Repos</span>
+              <span className="text-xs text-muted-foreground text-center">
+                View all repositories
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 p-4 sm:p-6 text-xs sm:text-sm"
+              onClick={() => router.push("/settings")}
+            >
+              <Users className="h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="font-medium">Manage Profile</span>
+              <span className="text-xs text-muted-foreground text-center">
+                Update settings
+              </span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  </DashboardLayout>
+);
 }
