@@ -152,11 +152,11 @@ export default function Dashboard() {
   const fetchRepositories = async () => {
     try {
       const token = localStorage.getItem("gitverse_token");
-      const response = await axios.get(buildApiUrl("/api/repositories"), {
+      const response = await axios.get(buildApiUrl("/api/repositories?limit=1000"), {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // API returns { repositories: [...] }
-      const repos = response.data.repositories || [];
+      // API returns { data: [...], nextCursor, hasMore }
+      const repos = response.data.data || [];
       setRepositories(Array.isArray(repos) ? repos : []);
     } catch (error) {
   console.error("Dashboard repository fetch failed:", error);
@@ -177,6 +177,103 @@ export default function Dashboard() {
   setLoading(false);
 }
 };
+      setLoading(false);
+    } catch (error: any) {
+      console.error("Error fetching repositories:", error);
+      
+      const isColdStart = error.response?.data?.error === "DATABASE_COLD_START";
+      if (isColdStart) {
+        toast({
+          title: "Waking up database...",
+          description: "This may take a few seconds.",
+        });
+        setTimeout(fetchRepositories, 3000);
+        return;
+      }
+
+      toast({
+        title: "Error",
+        description: "Failed to fetch repositories.",
+        variant: "destructive",
+      });
+      setRepositories([]);
+      setLoading(false);
+    }
+  };
+
+  const totalCommits = Array.isArray(repositories)
+    ? repositories.reduce((sum, r: any) => sum + (r._count?.commits || 0), 0)
+    : 0;
+  const totalContributors = Array.isArray(repositories)
+    ? repositories.reduce(
+      (sum, r: any) => sum + (r._count?.contributors || 0),
+      0
+    )
+    : 0;
+  const totalFiles = Array.isArray(repositories)
+    ? repositories.reduce((sum, r: any) => sum + (r._count?.files || 0), 0)
+    : 0;
+
+  const stats = [
+    {
+      label: "Repositories Analyzed",
+      value: (Array.isArray(repositories) ? repositories.length : 0).toString(),
+      icon: GitBranch,
+      change: `${repositories.filter((r: any) => r.status === "completed").length} completed`,
+    },
+    {
+      label: "Total Commits",
+      value: totalCommits.toLocaleString(),
+      icon: Activity,
+      change: `Across ${repositories.length} repos`,
+    },
+    {
+      label: "Contributors",
+      value: totalContributors.toLocaleString(),
+      icon: Users,
+      change: `Active developers`,
+    },
+    {
+      label: "Total Files",
+      value: totalFiles.toLocaleString(),
+      icon: Code,
+      change: `Tracked files`,
+    },
+  ];
+
+  const handleAnalyze = async () => {
+    if (!repoUrl.trim()) return;
+
+    if (!isValidGithubUrl(repoUrl)) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid GitHub repository URL (e.g., https://github.com/owner/repo).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      const token = localStorage.getItem("gitverse_token");
+
+      // Extract owner and name for recent storage
+      const cleanUrl = repoUrl.trim().replace(/\/$/, "").replace(/\.git$/, "");
+      const cleanParts = cleanUrl.split("/");
+      const ownerName = cleanParts[cleanParts.length - 2] || "unknown";
+
+      const response = await axios.post(
+        buildApiUrl("/api/repositories"),
+        {
+          name: repoName,
+          url: repoUrl.trim(),
+          description: `Repository from ${repoUrl}`,
+          scope: repoScope.trim() || undefined,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
 const totalCommits = Array.isArray(repositories)
   ? repositories.reduce((sum, r: any) => sum + (r._count?.commits || 0), 0)
