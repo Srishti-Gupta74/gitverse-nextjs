@@ -4,9 +4,7 @@ export const dynamic = "force-dynamic";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { isValidGithubUrl } from "@/lib/utils/validators";
 import { useState, useRef, useEffect } from "react";
-import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { isValidGithubUrl } from "@/lib/utils/validators";
 import { RecentReposList } from "@/components/RecentReposList";
 import { useRecentRepos } from "@/hooks/useRecentRepos";
 import {
