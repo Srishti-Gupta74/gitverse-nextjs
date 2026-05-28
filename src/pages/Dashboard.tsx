@@ -378,7 +378,6 @@ if (loading) {
 }
 return (
   <DashboardLayout>
-    <div className="min-h-screen bg-background"></div>
     <div className="space-y-6">
       {/* Welcome Section */}
       <div>
